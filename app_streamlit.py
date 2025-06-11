@@ -1,25 +1,40 @@
 import streamlit as st
 import pandas as pd
 import os
-import bcrypt
 import gdown
+import bcrypt
 from datetime import datetime
-from io import StringIO
 
 # === CONFIG ===
-FOLDER_URL = "https://drive.google.com/drive/folders/1tBpyY1VFi-hTxTWWlow4dE0PXrvV7Pvs"
+FOLDER_ID = "1tBpyY1VFi-hTxTWWlow4dE0PXrvV7Pvs"
+FOLDER_URL = f"https://drive.google.com/drive/folders/{FOLDER_ID}"
 USERS_FILE = "users.csv"
+LOCAL_USERS_FILE = "users.csv"
+RAPPORTI_DIR = "rapporti"
 
-# === FUNZIONI ===
+# === UTILITY ===
+@st.cache_data
+def scarica_file_drive(file_id, output):
+    url = f"https://drive.google.com/uc?id={file_id}"
+    gdown.download(url, output, quiet=False)
+
+def crea_cartella_locale():
+    if not os.path.exists(RAPPORTI_DIR):
+        os.makedirs(RAPPORTI_DIR)
+
+def scarica_tutti_i_csv():
+    os.system(f"gdown --folder https://drive.google.com/drive/folders/{FOLDER_ID} -O ./ --quiet")
+    crea_cartella_locale()
+    for file in os.listdir("."):
+        if file.endswith(".csv") and file != USERS_FILE:
+            os.replace(file, os.path.join(RAPPORTI_DIR, file))
+
 @st.cache_data
 def carica_utenti():
-    try:
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
-            df = pd.read_csv(f)
-        return df
-    except FileNotFoundError:
+    if not os.path.exists(LOCAL_USERS_FILE):
         st.error("⚠️ File utenti non trovato.")
         return pd.DataFrame()
+    return pd.read_csv(LOCAL_USERS_FILE)
 
 def check_login(user, pwd, df_users):
     if user in df_users["username"].values:
@@ -27,11 +42,17 @@ def check_login(user, pwd, df_users):
         return bcrypt.checkpw(pwd.encode(), user_row["password_hash"].encode()), user_row["ruolo"]
     return False, None
 
-def elenca_file_csv():
-    files = [f for f in os.listdir("rapporti") if f.endswith(".csv")]
+def elenca_file_csv(user, ruolo):
+    files = [f for f in os.listdir(RAPPORTI_DIR) if f.endswith(".csv")]
+    if ruolo != "admin":
+        files = [f for f in files if f.lower().endswith(f"{user.lower()}.csv")]
     return sorted(files, reverse=True)
 
-# === UI LOGIN ===
+# === INIZIALIZZAZIONE ===
+crea_cartella_locale()
+scarica_tutti_i_csv()
+
+# === STREAMLIT UI ===
 st.set_page_config(page_title="Dashboard Rapportini", layout="wide")
 st.title("📊 Dashboard Rapportini Attività")
 
@@ -61,13 +82,11 @@ if not st.session_state.logged_in:
 
 else:
     st.sidebar.success(f"Sei connesso come: {st.session_state.user} ({st.session_state.ruolo})")
-    files = elenca_file_csv()
-    if st.session_state.ruolo != "admin":
-        files = [f for f in files if f.lower().endswith(f"{st.session_state.user.lower()}.csv")]
-
+    files = elenca_file_csv(st.session_state.user, st.session_state.ruolo)
     file_sel = st.selectbox("📅 Seleziona un giorno", files)
+
     if file_sel:
-        df = pd.read_csv(os.path.join("rapporti", file_sel))
+        df = pd.read_csv(os.path.join(RAPPORTI_DIR, file_sel))
         st.subheader("🧾 Dettaglio attività")
         st.dataframe(df)
 
