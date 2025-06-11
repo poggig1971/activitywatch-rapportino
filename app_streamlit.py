@@ -1,54 +1,32 @@
 import streamlit as st
 import pandas as pd
 import os
-import gdown
-import bcrypt
 from datetime import datetime
+import bcrypt
 
 # === CONFIG ===
 FOLDER_ID = "1tBpyY1VFi-hTxTWWlow4dE0PXrvV7Pvs"
-FOLDER_URL = f"https://drive.google.com/drive/folders/{FOLDER_ID}"
-USERS_FILE = "users.csv"
 RAPPORTI_DIR = "rapporti"
 
-# === INIZIALIZZAZIONE ===
-def crea_cartelle():
+# === UTENTI DEFINITI NEL CODICE ===
+USERS = {
+    "poggi": {"password": "123", "ruolo": "admin"},
+    "gosmar": {"password": "123", "ruolo": "user"},
+    "mihu": {"password": "123", "ruolo": "user"},
+    "tiziano": {"password": "123", "ruolo": "user"},
+    "vale": {"password": "123", "ruolo": "user"},
+    "gino": {"password": "123", "ruolo": "user"},
+}
+
+# === UTILITY ===
+def crea_cartella():
     if not os.path.exists(RAPPORTI_DIR):
         os.makedirs(RAPPORTI_DIR)
 
-def scarica_tutti_i_csv():
-    os.system(f"gdown --folder https://drive.google.com/drive/folders/{FOLDER_ID} -O ./ --quiet")
-    for file in os.listdir("."):
-        if file.endswith(".csv") and file != USERS_FILE:
-            os.replace(file, os.path.join(RAPPORTI_DIR, file))
-
-def scarica_users_csv():
-    # Cerca il file users.csv scaricato da gdown
-    if not os.path.exists(USERS_FILE):
-        st.error("⚠️ Il file users.csv non è stato trovato nella cartella corrente.")
-        return pd.DataFrame()
-    try:
-        df = pd.read_csv(USERS_FILE)
-        if "username" not in df.columns:
-            st.error("⚠️ Il file utenti non contiene la colonna 'username'.")
-            return pd.DataFrame()
-        return df
-    except Exception as e:
-        st.error(f"❌ Errore lettura users.csv: {e}")
-        return pd.DataFrame()
-
-def check_login(user, pwd, df_users):
-    # Accesso garantito all'admin "poggi" con password "123"
-    if user == "poggi" and pwd == "123":
-        return True, "admin"
-
-    if "username" not in df_users.columns or "password_hash" not in df_users.columns:
-        return False, None
-
-    if user in df_users["username"].values:
-        user_row = df_users[df_users["username"] == user].iloc[0]
-        return bcrypt.checkpw(pwd.encode(), user_row["password_hash"].encode()), user_row["ruolo"]
-
+def check_login(username, password):
+    user = USERS.get(username)
+    if user and password == user["password"]:
+        return True, user["ruolo"]
     return False, None
 
 def elenca_file_csv(user, ruolo):
@@ -58,10 +36,9 @@ def elenca_file_csv(user, ruolo):
     return sorted(files, reverse=True)
 
 # === AVVIO ===
-crea_cartelle()
-scarica_tutti_i_csv()
+crea_cartella()
 
-# === STREAMLIT UI ===
+# === UI ===
 st.set_page_config(page_title="Dashboard Rapportini", layout="wide")
 st.title("📊 Dashboard Rapportini Attività")
 
@@ -76,10 +53,8 @@ if not st.session_state.logged_in:
         username = st.text_input("Nome utente")
         password = st.text_input("Password", type="password")
         submit = st.form_submit_button("Accedi")
-
         if submit:
-            df_utenti = scarica_users_csv()
-            success, ruolo = check_login(username, password, df_utenti)
+            success, ruolo = check_login(username, password)
             if success:
                 st.session_state.logged_in = True
                 st.session_state.user = username
@@ -90,16 +65,35 @@ if not st.session_state.logged_in:
                 st.error("Credenziali non valide")
 
 else:
-    st.sidebar.success(f"Sei connesso come: {st.session_state.user} ({st.session_state.ruolo})")
-    files = elenca_file_csv(st.session_state.user, st.session_state.ruolo)
-    file_sel = st.selectbox("📅 Seleziona un giorno", files)
+    username = st.session_state.user
+    ruolo = st.session_state.ruolo
+    st.sidebar.success(f"Sei connesso come: {username} ({ruolo})")
 
-    if file_sel:
-        df = pd.read_csv(os.path.join(RAPPORTI_DIR, file_sel))
-        st.subheader("🧾 Dettaglio attività")
-        st.dataframe(df)
+    # Upload CSV personale
+    st.subheader("📤 Carica il tuo file CSV")
+    uploaded_file = st.file_uploader("Seleziona un file .csv", type="csv")
+    if uploaded_file:
+        today = datetime.now().strftime("%Y.%m.%d")
+        filename = f"{today}_{username}.csv"
+        save_path = os.path.join(RAPPORTI_DIR, filename)
+        with open(save_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        st.success(f"✅ File caricato come: {filename}")
+        st.rerun()
 
-        if "app" in df.columns:
-            top_apps = df["app"].value_counts().head(5)
+    # Visualizzazione file disponibili
+    st.subheader("📂 Seleziona un giorno")
+    files = elenca_file_csv(username, ruolo)
+    if not files:
+        st.warning("⚠️ Nessun file CSV trovato.")
+    else:
+        file_sel = st.selectbox("📅 Giorno disponibile", files)
+        if file_sel:
+            df = pd.read_csv(os.path.join(RAPPORTI_DIR, file_sel))
+            st.dataframe(df)
+            if "app" in df.columns:
+                top_apps = df["app"].value_counts().head(5)
+                st.subheader("📈 App più usate")
+                st.bar_chart(top_apps)
             st.subheader("📈 App più usate")
             st.bar_chart(top_apps)
