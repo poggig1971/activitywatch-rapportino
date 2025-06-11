@@ -9,32 +9,33 @@ from datetime import datetime
 FOLDER_ID = "1tBpyY1VFi-hTxTWWlow4dE0PXrvV7Pvs"
 FOLDER_URL = f"https://drive.google.com/drive/folders/{FOLDER_ID}"
 USERS_FILE = "users.csv"
-LOCAL_USERS_FILE = "users.csv"
 RAPPORTI_DIR = "rapporti"
 
-# === UTILITY ===
-@st.cache_data
-def scarica_file_drive(file_id, output):
-    url = f"https://drive.google.com/uc?id={file_id}"
-    gdown.download(url, output, quiet=False)
-
-def crea_cartella_locale():
+# === INIZIALIZZAZIONE ===
+def crea_cartelle():
     if not os.path.exists(RAPPORTI_DIR):
         os.makedirs(RAPPORTI_DIR)
 
 def scarica_tutti_i_csv():
     os.system(f"gdown --folder https://drive.google.com/drive/folders/{FOLDER_ID} -O ./ --quiet")
-    crea_cartella_locale()
     for file in os.listdir("."):
         if file.endswith(".csv") and file != USERS_FILE:
             os.replace(file, os.path.join(RAPPORTI_DIR, file))
 
-@st.cache_data
-def carica_utenti():
-    if not os.path.exists(LOCAL_USERS_FILE):
-        st.error("⚠️ File utenti non trovato.")
+def scarica_users_csv():
+    # Cerca il file users.csv scaricato da gdown
+    if not os.path.exists(USERS_FILE):
+        st.error("⚠️ Il file users.csv non è stato trovato nella cartella corrente.")
         return pd.DataFrame()
-    return pd.read_csv(LOCAL_USERS_FILE)
+    try:
+        df = pd.read_csv(USERS_FILE)
+        if "username" not in df.columns:
+            st.error("⚠️ Il file utenti non contiene la colonna 'username'.")
+            return pd.DataFrame()
+        return df
+    except Exception as e:
+        st.error(f"❌ Errore lettura users.csv: {e}")
+        return pd.DataFrame()
 
 def check_login(user, pwd, df_users):
     if user in df_users["username"].values:
@@ -48,8 +49,8 @@ def elenca_file_csv(user, ruolo):
         files = [f for f in files if f.lower().endswith(f"{user.lower()}.csv")]
     return sorted(files, reverse=True)
 
-# === INIZIALIZZAZIONE ===
-crea_cartella_locale()
+# === AVVIO ===
+crea_cartelle()
 scarica_tutti_i_csv()
 
 # === STREAMLIT UI ===
@@ -69,8 +70,8 @@ if not st.session_state.logged_in:
         submit = st.form_submit_button("Accedi")
 
         if submit:
-            users_df = carica_utenti()
-            success, ruolo = check_login(username, password, users_df)
+            df_utenti = scarica_users_csv()
+            success, ruolo = check_login(username, password, df_utenti)
             if success:
                 st.session_state.logged_in = True
                 st.session_state.user = username
