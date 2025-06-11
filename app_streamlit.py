@@ -54,7 +54,7 @@ def check_login(user, pwd, df_users):
 def elenca_file_csv(user, ruolo):
     files = [f for f in os.listdir(RAPPORTI_DIR) if f.endswith(".csv")]
     if ruolo != "admin":
-        files = [f for f in files if f.lower().endswith(f"{user.lower()}.csv")]
+        files = [f for f in files if user.lower() in f.lower()]
     return sorted(files, reverse=True)
 
 # === AVVIO ===
